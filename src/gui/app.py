@@ -13,7 +13,6 @@ from tkinter import messagebox, filedialog
 import threading
 import torch
 import numpy as np
-from pathlib import Path
 from typing import Optional
 
 from src.cython.bitboard import OthelloBitboard
@@ -42,8 +41,10 @@ class OthelloApp:
         self.board = OthelloBitboard()
         self.board.reset()
         self.game_history = []  # 履歴（待った用）
+        self.player_history = []  # 手番履歴（待った用）
         self.is_ai_thinking = False
         self.game_mode = "human_vs_ai"  # "human_vs_ai", "ai_vs_ai", "human_vs_human"
+        self.current_player = 1  # 1=黒, -1=白（黒が先手）
 
         # AI設定
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -69,18 +70,18 @@ class OthelloApp:
 
         # ファイルメニュー
         file_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="ファイル", menu=file_menu)
-        file_menu.add_command(label="モデル読込", command=self._load_model_dialog)
+        menubar.add_cascade(label="File", menu=file_menu)
+        file_menu.add_command(label="Load Model", command=self._load_model_dialog)
         file_menu.add_separator()
-        file_menu.add_command(label="終了", command=self.root.quit)
+        file_menu.add_command(label="Exit", command=self.root.quit)
 
         # ゲームメニュー
         game_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="ゲーム", menu=game_menu)
-        game_menu.add_command(label="新規ゲーム", command=self.new_game)
-        game_menu.add_command(label="待った", command=self.undo_move)
+        menubar.add_cascade(label="Game", menu=game_menu)
+        game_menu.add_command(label="New Game", command=self.new_game)
+        game_menu.add_command(label="Undo", command=self.undo_move)
         game_menu.add_separator()
-        game_menu.add_command(label="ヒント表示", command=self._toggle_hint)
+        game_menu.add_command(label="Show Hint", command=self._toggle_hint)
 
         # メインフレーム
         main_frame = tk.Frame(self.root)
@@ -112,7 +113,7 @@ class OthelloApp:
 
         tk.Button(
             button_frame,
-            text="新規ゲーム",
+            text="New Game",
             command=self.new_game,
             width=12,
             height=2,
@@ -120,7 +121,7 @@ class OthelloApp:
 
         tk.Button(
             button_frame,
-            text="待った",
+            text="Undo",
             command=self.undo_move,
             width=12,
             height=2,
@@ -128,17 +129,17 @@ class OthelloApp:
 
         tk.Button(
             button_frame,
-            text="AIに手番を渡す",
+            text="AI Move",
             command=self.ai_move,
             width=12,
             height=2,
         ).pack(pady=5)
 
         # AI設定
-        settings_frame = tk.LabelFrame(right_frame, text="AI設定", padx=10, pady=10)
+        settings_frame = tk.LabelFrame(right_frame, text="AI Settings", padx=10, pady=10)
         settings_frame.pack(pady=10, fill=tk.BOTH)
 
-        tk.Label(settings_frame, text="思考時間:").pack()
+        tk.Label(settings_frame, text="Simulations:").pack()
         self.sim_scale = tk.Scale(
             settings_frame,
             from_=10,
@@ -160,13 +161,29 @@ class OthelloApp:
             # チェックポイント読み込み
             checkpoint = torch.load(model_path, map_location=self.device)
 
-            # モデル作成（設定から）
+            # モデル作成（設定から、またはstate_dictから自動検出）
             config = checkpoint.get("config", {})
+            state_dict = checkpoint["model_state_dict"]
+
+            # state_dictからブロック数を自動検出
+            if "num_blocks" not in config:
+                block_keys = [k for k in state_dict.keys() if k.startswith("res_blocks.")]
+                if block_keys:
+                    block_indices = [int(k.split(".")[1]) for k in block_keys]
+                    config["num_blocks"] = max(block_indices) + 1
+
+            # state_dictからフィルタ数を自動検出
+            if "num_filters" not in config:
+                for key in state_dict.keys():
+                    if "res_blocks.0.conv1.weight" in key:
+                        config["num_filters"] = state_dict[key].shape[0]
+                        break
+
             self.model = OthelloResNet(
                 num_blocks=config.get("num_blocks", 10),
                 num_filters=config.get("num_filters", 128),
             )
-            self.model.load_state_dict(checkpoint["model_state_dict"])
+            self.model.load_state_dict(state_dict)
             self.model.to(self.device)
             self.model.eval()
 
@@ -177,15 +194,15 @@ class OthelloApp:
                 c_puct=1.0,
             )
 
-            messagebox.showinfo("成功", f"モデルを読み込みました:\n{model_path}")
+            messagebox.showinfo("Success", f"Model loaded:\n{model_path}")
 
         except Exception as e:
-            messagebox.showerror("エラー", f"モデル読み込み失敗:\n{e}")
+            messagebox.showerror("Error", f"Failed to load model:\n{e}")
 
     def _load_model_dialog(self):
         """モデル読み込みダイアログ"""
         file_path = filedialog.askopenfilename(
-            title="モデルファイルを選択",
+            title="Select Model File",
             filetypes=[("PyTorch Model", "*.pt"), ("All Files", "*.*")],
             initialdir="data/models",
         )
@@ -197,20 +214,23 @@ class OthelloApp:
         """新規ゲームを開始"""
         self.board.reset()
         self.game_history = []
+        self.player_history = []
         self.is_ai_thinking = False
+        self.current_player = 1  # 黒が先手
         self._update_display()
-        self.info_panel.set_message("新しいゲームを開始しました", "green")
+        self.info_panel.set_message("New game started", "green")
 
     def undo_move(self):
         """待った（1手戻す）"""
         if len(self.game_history) == 0:
-            messagebox.showinfo("待った", "これ以上戻せません")
+            messagebox.showinfo("Undo", "No more moves to undo")
             return
 
         # 履歴から1つ前の状態を復元
         self.board = self.game_history.pop()
+        self.current_player = self.player_history.pop()
         self._update_display()
-        self.info_panel.set_message("1手戻しました", "orange")
+        self.info_panel.set_message("Move undone", "orange")
 
     def _on_board_click(self, position: int):
         """
@@ -220,18 +240,26 @@ class OthelloApp:
             position: クリックされた位置 (0-63)
         """
         if self.is_ai_thinking:
-            messagebox.showinfo("待機中", "AIが思考中です")
+            messagebox.showinfo("Wait", "AI is thinking...")
             return
 
         if self.board.is_terminal():
-            messagebox.showinfo("ゲーム終了", "ゲームは既に終了しています")
+            messagebox.showinfo("Game Over", "The game has already ended")
+            return
+
+        # 合法手チェック
+        legal_moves = self.board.get_legal_moves()
+        if position not in legal_moves:
+            messagebox.showwarning("Invalid Move", "You cannot place here")
             return
 
         # 履歴保存（待った用）
         self.game_history.append(self.board.copy())
+        self.player_history.append(self.current_player)
 
         # 着手
         self.board.make_move(position)
+        self.current_player *= -1  # 手番交代
         self._update_display()
 
         # 終局チェック
@@ -246,7 +274,7 @@ class OthelloApp:
     def ai_move(self):
         """AIに着手させる"""
         if self.mcts is None:
-            messagebox.showwarning("警告", "モデルが読み込まれていません")
+            messagebox.showwarning("Warning", "No model loaded")
             return
 
         if self.board.is_terminal():
@@ -254,7 +282,7 @@ class OthelloApp:
 
         # 別スレッドでAI思考
         self.is_ai_thinking = True
-        self.info_panel.set_message("AI思考中...", "blue")
+        self.info_panel.set_message("AI thinking...", "blue")
 
         thread = threading.Thread(target=self._ai_move_thread)
         thread.daemon = True
@@ -273,7 +301,10 @@ class OthelloApp:
             self.root.after(0, lambda: self._execute_ai_move(action))
 
         except Exception as e:
-            self.root.after(0, lambda: messagebox.showerror("エラー", f"AI思考エラー:\n{e}"))
+            err_msg = str(e)
+            self.root.after(
+                0, lambda msg=err_msg: messagebox.showerror("Error", f"AI error:\n{msg}")
+            )
             self.is_ai_thinking = False
 
     def _execute_ai_move(self, action: int):
@@ -283,15 +314,31 @@ class OthelloApp:
         Args:
             action: 着手位置
         """
+        # AIが選んだ手が合法手かチェック
+        legal_moves = self.board.get_legal_moves()
+        if action not in legal_moves:
+            # 合法手でない場合、合法手からランダムに選択
+            import random
+            valid_moves = [m for m in legal_moves if m < 64]
+            if valid_moves:
+                action = random.choice(valid_moves)
+            else:
+                action = 64  # パス
+            self.info_panel.set_message(f"AI fallback to {action}", "orange")
+
         # 履歴保存
         self.game_history.append(self.board.copy())
+        self.player_history.append(self.current_player)
 
         # 着手
         self.board.make_move(action)
+        self.current_player *= -1  # 手番交代
         self._update_display()
 
         self.is_ai_thinking = False
-        self.info_panel.set_message(f"AIが {action} に着手しました", "green")
+        row, col = action // 8, action % 8
+        coord = f"{chr(65 + col)}{row + 1}"
+        self.info_panel.set_message(f"AI played at {coord}", "green")
 
         # 終局チェック
         if self.board.is_terminal():
@@ -303,16 +350,25 @@ class OthelloApp:
         board_array = self._get_board_array()
         legal_moves = self.board.get_legal_moves()
 
+        # パス(64)を除外
+        legal_moves = [m for m in legal_moves if m < 64]
+
         # 盤面更新
         self.board_ui.update_board(board_array, legal_moves)
 
-        # 石数更新
-        black_count, white_count = self.board.get_stone_counts()
+        # 石数更新（get_stone_countsは自分視点なので変換が必要）
+        self_count, opp_count = self.board.get_stone_counts()
+        is_black_turn = self.board.move_count % 2 == 0
+        if is_black_turn:
+            # 黒番: self=黒, opp=白
+            black_count, white_count = self_count, opp_count
+        else:
+            # 白番: self=白, opp=黒
+            black_count, white_count = opp_count, self_count
         self.info_panel.update_scores(black_count, white_count)
 
-        # 手番更新（Bitboardは常に自分視点なので、手数から判定）
-        move_count = self.board.move_count
-        current_player = 1 if (move_count % 2 == 0) else -1
+        # 手番更新（move_countから判定）
+        current_player = 1 if is_black_turn else -1
         self.info_panel.update_turn(current_player)
 
     def _get_board_array(self) -> np.ndarray:
@@ -324,16 +380,16 @@ class OthelloApp:
         """
         tensor = self.board.get_tensor_input()  # (3, 8, 8)
 
-        # チャンネル0: 自分の石、チャンネル1: 相手の石
-        # 手数から現在の手番を判定
-        move_count = self.board.move_count
-        current_player = 1 if (move_count % 2 == 0) else -1
+        # ビットボードのself_boardが黒か白かを判定
+        # move_count % 2 == 0 なら黒番（self=黒）
+        # パスがあるとずれるが、パス時もmove_countを増加させるように修正済み
+        is_black_turn = self.board.move_count % 2 == 0
 
-        if current_player == 1:
-            # 黒番: チャンネル0が黒、チャンネル1が白
+        if is_black_turn:
+            # self_board = 黒
             board_array = tensor[0] - tensor[1]
         else:
-            # 白番: チャンネル1が黒、チャンネル0が白
+            # self_board = 白
             board_array = tensor[1] - tensor[0]
 
         return board_array
@@ -344,13 +400,13 @@ class OthelloApp:
         black_count, white_count = self.board.get_stone_counts()
 
         if winner == 1:
-            result = f"黒の勝ち！\n黒: {black_count} - 白: {white_count}"
+            result = f"Black wins!\nBlack: {black_count} - White: {white_count}"
         elif winner == -1:
-            result = f"白の勝ち！\n黒: {black_count} - 白: {white_count}"
+            result = f"White wins!\nBlack: {black_count} - White: {white_count}"
         else:
-            result = f"引き分け\n黒: {black_count} - 白: {white_count}"
+            result = f"Draw\nBlack: {black_count} - White: {white_count}"
 
-        messagebox.showinfo("ゲーム終了", result)
+        messagebox.showinfo("Game Over", result)
         self.info_panel.set_message(result.replace("\n", " "), "red")
 
     def _toggle_hint(self):
