@@ -269,6 +269,15 @@ class MCTS:
         Returns:
             int: 最良の行動 (0-64)
         """
+        # 合法手を取得
+        legal_actions = board.get_legal_moves()
+        if len(legal_actions) == 0:
+            return 64  # パス
+
+        # シミュレーション回数が少なすぎる場合は合法手からランダムに選択
+        if num_simulations < 1:
+            return legal_actions[0]
+
         policy, _ = self.search(
             board,
             num_simulations=num_simulations,
@@ -276,4 +285,12 @@ class MCTS:
             add_dirichlet_noise=False
         )
 
-        return int(np.argmax(policy))
+        # 合法手の中から最大確率の行動を選択
+        best_action = legal_actions[0]
+        best_prob = policy[best_action]
+        for action in legal_actions:
+            if policy[action] > best_prob:
+                best_prob = policy[action]
+                best_action = action
+
+        return best_action
