@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Othello AlphaZero</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div id="app">
+        <header>
+            <h1>Othello AlphaZero</h1>
+        </header>
+
+        <main>
+            <div id="game-container">
+                <!-- 盤面 -->
+                <div id="board-container">
+                    <canvas id="board-canvas" width="480" height="480"></canvas>
+                </div>
+
+                <!-- 右パネル -->
+                <div id="side-panel">
+                    <!-- 情報パネル -->
+                    <div id="info-panel">
+                        <div id="turn-indicator">
+                            <span id="turn-label">Turn:</span>
+                            <span id="turn-value">Black</span>
+                            <span id="turn-stone"></span>
+                        </div>
+                        <div id="score-display">
+                            <div class="score-item">
+                                <span class="stone black"></span>
+                                <span id="black-count">2</span>
+                            </div>
+                            <div class="score-item">
+                                <span class="stone white"></span>
+                                <span id="white-count">2</span>
+                            </div>
+                        </div>
+                        <div id="message-area">Click to play</div>
+                    </div>
+
+                    <!-- コントロールボタン -->
+                    <div id="controls">
+                        <button id="new-game-btn" class="btn btn-primary">New Game</button>
+                        <button id="undo-btn" class="btn">Undo</button>
+                        <button id="ai-move-btn" class="btn">AI Move</button>
+                        <button id="hint-btn" class="btn">Hint</button>
+                    </div>
+
+                    <!-- AI設定 -->
+                    <div id="ai-settings">
+                        <h3>AI Settings</h3>
+                        <div class="setting-item">
+                            <label for="sim-slider">Simulations:</label>
+                            <input type="range" id="sim-slider" min="10" max="200" value="50">
+                            <span id="sim-value">50</span>
+                        </div>
+                        <div class="setting-item">
+                            <label for="model-select">Model:</label>
+                            <select id="model-select">
+                                <option value="">-- Select Model --</option>
+                            </select>
+                            <button id="load-model-btn" class="btn btn-small">Load</button>
+                        </div>
+                        <div id="model-status">No model loaded</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Othello AlphaZero - Reinforcement Learning AI</p>
+        </footer>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/board.js"></script>
+    <script src="/static/js/ui.js"></script>
+    <script src="/static/js/main.js"></script>
+</body>
+</html>

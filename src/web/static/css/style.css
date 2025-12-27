@@ -1,0 +1,278 @@
+/* Othello AlphaZero Web - スタイル */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: #1a1a2e;
+    color: #eee;
+    min-height: 100vh;
+}
+
+#app {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* ヘッダー */
+header {
+    background-color: #16213e;
+    padding: 1rem 2rem;
+    text-align: center;
+    border-bottom: 2px solid #0f3460;
+}
+
+header h1 {
+    font-size: 1.5rem;
+    color: #e94560;
+}
+
+/* メイン */
+main {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 2rem;
+}
+
+#game-container {
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+}
+
+/* 盤面 */
+#board-container {
+    background-color: #16213e;
+    padding: 1rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+#board-canvas {
+    display: block;
+    cursor: pointer;
+}
+
+/* サイドパネル */
+#side-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    width: 250px;
+}
+
+/* 情報パネル */
+#info-panel {
+    background-color: #16213e;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+#turn-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    font-size: 1.1rem;
+}
+
+#turn-stone {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    margin-left: auto;
+}
+
+#turn-stone.black {
+    background: radial-gradient(circle at 30% 30%, #555, #000);
+}
+
+#turn-stone.white {
+    background: radial-gradient(circle at 30% 30%, #fff, #ccc);
+}
+
+#score-display {
+    display: flex;
+    justify-content: space-around;
+    margin-bottom: 1rem;
+}
+
+.score-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.2rem;
+    font-weight: bold;
+}
+
+.stone {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+}
+
+.stone.black {
+    background: radial-gradient(circle at 30% 30%, #555, #000);
+}
+
+.stone.white {
+    background: radial-gradient(circle at 30% 30%, #fff, #ccc);
+    border: 1px solid #888;
+}
+
+#message-area {
+    padding: 0.75rem;
+    background-color: #0f3460;
+    border-radius: 4px;
+    text-align: center;
+    font-size: 0.9rem;
+    min-height: 2.5rem;
+}
+
+#message-area.thinking {
+    color: #4da6ff;
+    animation: pulse 1s infinite;
+}
+
+#message-area.success {
+    color: #4dff88;
+}
+
+#message-area.error {
+    color: #ff6b6b;
+}
+
+#message-area.warning {
+    color: #ffd93d;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+/* コントロール */
+#controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+}
+
+.btn {
+    padding: 0.75rem 1rem;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    background-color: #0f3460;
+    color: #eee;
+}
+
+.btn:hover {
+    background-color: #1a4a7a;
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn-primary {
+    background-color: #e94560;
+}
+
+.btn-primary:hover {
+    background-color: #ff6b8a;
+}
+
+.btn-small {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+}
+
+/* AI設定 */
+#ai-settings {
+    background-color: #16213e;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+#ai-settings h3 {
+    font-size: 1rem;
+    margin-bottom: 1rem;
+    color: #aaa;
+}
+
+.setting-item {
+    margin-bottom: 1rem;
+}
+
+.setting-item label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.85rem;
+    color: #888;
+}
+
+.setting-item input[type="range"] {
+    width: 100%;
+    margin-bottom: 0.25rem;
+}
+
+.setting-item select {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+    background-color: #1a1a2e;
+    color: #eee;
+    margin-bottom: 0.5rem;
+}
+
+#sim-value {
+    font-size: 0.85rem;
+    color: #4da6ff;
+}
+
+#model-status {
+    font-size: 0.8rem;
+    color: #888;
+    margin-top: 0.5rem;
+}
+
+#model-status.loaded {
+    color: #4dff88;
+}
+
+/* フッター */
+footer {
+    background-color: #16213e;
+    padding: 1rem;
+    text-align: center;
+    font-size: 0.8rem;
+    color: #666;
+    border-top: 1px solid #0f3460;
+}
+
+/* レスポンシブ */
+@media (max-width: 800px) {
+    #game-container {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    #side-panel {
+        width: 100%;
+        max-width: 480px;
+    }
+}
