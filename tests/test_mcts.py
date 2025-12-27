@@ -317,3 +317,28 @@ class TestIntegration:
             if action not in legal_actions:
                 assert policy[action] == 0.0, \
                     f"Non-legal action {action} has probability {policy[action]}"
+
+    def test_get_action_evaluations(self, setup):
+        """get_action_evaluationsのテスト（ヒント表示用）"""
+        mcts = setup["mcts"]
+        board = setup["board"]
+
+        evaluations = mcts.get_action_evaluations(board, num_simulations=10)
+
+        # 評価値配列のサイズチェック
+        assert evaluations.shape == (65,)
+
+        # 評価値は0-100の整数
+        assert evaluations.dtype == np.int32
+        assert np.all(evaluations >= 0)
+        assert np.all(evaluations <= 100)
+
+        # 合法手にのみ評価値がある
+        legal_actions = board.get_legal_moves()
+        for action in range(65):
+            if action not in legal_actions:
+                assert evaluations[action] == 0, \
+                    f"Non-legal action {action} has evaluation {evaluations[action]}"
+
+        # 少なくとも1つの合法手に非ゼロの評価値がある
+        assert any(evaluations[action] > 0 for action in legal_actions)

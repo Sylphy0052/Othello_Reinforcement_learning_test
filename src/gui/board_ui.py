@@ -123,12 +123,12 @@ class OthelloBoardUI(tk.Canvas):
 
                 # 合法手のハイライト
                 elif pos in self.legal_moves:
-                    self._draw_legal_hint(row, col)
-
-                # 評価値の表示
-                if self.show_evaluation and self.evaluation_values is not None:
-                    if pos < len(self.evaluation_values):
-                        self._draw_evaluation(row, col, self.evaluation_values[pos])
+                    # 評価値表示中は評価値を表示、それ以外はヒント円を表示
+                    if self.show_evaluation and self.evaluation_values is not None:
+                        if pos < len(self.evaluation_values):
+                            self._draw_evaluation(row, col, self.evaluation_values[pos])
+                    else:
+                        self._draw_legal_hint(row, col)
 
     def _draw_stone(self, row: int, col: int, player: int):
         """
@@ -174,26 +174,38 @@ class OthelloBoardUI(tk.Canvas):
             tags="legal"
         )
 
-    def _draw_evaluation(self, row: int, col: int, value: float):
+    def _draw_evaluation(self, row: int, col: int, value: int):
         """
         評価値を描画
 
         Args:
             row: 行
             col: 列
-            value: 評価値
+            value: 評価値 (0-100の整数)
         """
+        # 値が0の場合は描画しない（合法手以外）
+        if value == 0:
+            return
+
         center_x = col * self.cell_size + self.cell_size // 2
         center_y = row * self.cell_size + self.cell_size // 2
 
-        # 評価値を0-100のスケールに変換
-        eval_str = f"{value * 100:.1f}"
+        # 評価値をそのまま表示（すでに0-100スケール）
+        eval_str = str(value)
+
+        # 評価値に応じた色（高いほど緑、低いほど赤）
+        if value >= 60:
+            color = "#00FF00"  # 緑（良い手）
+        elif value >= 40:
+            color = "#FFFF00"  # 黄色（普通の手）
+        else:
+            color = "#FF6600"  # オレンジ（悪い手）
 
         self.create_text(
             center_x, center_y,
             text=eval_str,
-            fill="yellow",
-            font=("helvetica", 8),
+            fill=color,
+            font=("helvetica", 10, "bold"),
             tags="eval"
         )
 
@@ -226,6 +238,31 @@ class OthelloBoardUI(tk.Canvas):
     def toggle_evaluation(self):
         """評価値表示の切り替え"""
         self.show_evaluation = not self.show_evaluation
+        self._redraw()
+
+    def set_evaluation_values(self, evaluation: np.ndarray):
+        """
+        評価値を設定
+
+        Args:
+            evaluation: 評価値配列 (65,) 各マスの評価値 (0-100の整数)
+        """
+        self.evaluation_values = evaluation
+
+    def show_evaluations(self, evaluation: np.ndarray):
+        """
+        評価値を設定して表示をオンにする
+
+        Args:
+            evaluation: 評価値配列 (65,) 各マスの評価値 (0-100の整数)
+        """
+        self.evaluation_values = evaluation
+        self.show_evaluation = True
+        self._redraw()
+
+    def hide_evaluations(self):
+        """評価値表示をオフにする"""
+        self.show_evaluation = False
         self._redraw()
 
     def clear(self):

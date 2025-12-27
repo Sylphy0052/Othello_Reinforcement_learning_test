@@ -135,6 +135,14 @@ class OthelloApp:
             height=2,
         ).pack(pady=5)
 
+        tk.Button(
+            button_frame,
+            text="Hint",
+            command=self._toggle_hint,
+            width=12,
+            height=2,
+        ).pack(pady=5)
+
         # AI設定
         settings_frame = tk.LabelFrame(right_frame, text="AI Settings", padx=10, pady=10)
         settings_frame.pack(pady=10, fill=tk.BOTH)
@@ -353,7 +361,9 @@ class OthelloApp:
         # パス(64)を除外
         legal_moves = [m for m in legal_moves if m < 64]
 
-        # 盤面更新
+        # 盤面更新（評価値をリセット）
+        self.board_ui.evaluation_values = None
+        self.board_ui.show_evaluation = False
         self.board_ui.update_board(board_array, legal_moves)
 
         # 石数更新（get_stone_countsは自分視点なので変換が必要）
@@ -411,7 +421,41 @@ class OthelloApp:
 
     def _toggle_hint(self):
         """ヒント表示の切り替え"""
-        self.board_ui.toggle_evaluation()
+        # 現在表示中なら非表示に
+        if self.board_ui.show_evaluation:
+            self.board_ui.hide_evaluations()
+            self.info_panel.set_message("Hint hidden", "gray")
+            return
+
+        # モデルが読み込まれていない場合
+        if self.mcts is None:
+            messagebox.showwarning("Warning", "No model loaded. Load a model first.")
+            return
+
+        # 終局している場合
+        if self.board.is_terminal():
+            messagebox.showinfo("Info", "Game has ended")
+            return
+
+        # AI思考中は無視
+        if self.is_ai_thinking:
+            messagebox.showinfo("Wait", "AI is thinking...")
+            return
+
+        # MCTSで評価値を計算（少なめのシミュレーション回数で高速化）
+        hint_simulations = max(10, self.ai_simulations // 2)
+        self.info_panel.set_message("Calculating hint...", "blue")
+        self.root.update()  # UIを更新
+
+        try:
+            evaluations = self.mcts.get_action_evaluations(
+                self.board,
+                num_simulations=hint_simulations
+            )
+            self.board_ui.show_evaluations(evaluations)
+            self.info_panel.set_message("Hint: Higher = Better move", "green")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to calculate hint:\n{e}")
 
     def _update_ai_simulations(self, value):
         """AI思考時間（シミュレーション回数）を更新"""

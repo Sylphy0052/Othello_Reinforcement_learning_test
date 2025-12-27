@@ -294,3 +294,69 @@ class MCTS:
                 best_action = action
 
         return best_action
+
+    def get_action_evaluations(
+        self,
+        board,
+        num_simulations: int,
+    ) -> np.ndarray:
+        """
+        各合法手の評価値を取得（ヒント表示用）
+
+        MCTS探索を実行し、各手の良さを0-100の整数で返す。
+        Q値（平均価値）を正規化して使用。
+
+        Args:
+            board: OthelloBitboard インスタンス
+            num_simulations (int): シミュレーション回数
+
+        Returns:
+            np.ndarray: 評価値配列 (65,) 各マスの評価値 (0-100の整数)
+                        合法手以外は0
+        """
+        evaluations = np.zeros(65, dtype=np.int32)
+
+        # 合法手を取得
+        legal_actions = board.get_legal_moves()
+        if len(legal_actions) == 0:
+            return evaluations
+
+        # シミュレーション回数が0以下の場合は空配列を返す
+        if num_simulations < 1:
+            return evaluations
+
+        # ルートノードの作成と探索
+        root = MCTSNode(prior=1.0)
+
+        # ルートノードの初期展開
+        board_tensor = self._get_board_tensor(board)
+        policy_probs, value = self._predict(board_tensor)
+
+        root.expand(policy_probs, legal_actions)
+
+        # シミュレーションを実行
+        for _ in range(num_simulations):
+            board_copy = board.copy()
+            self._run_simulation(root, board_copy)
+
+        # 各合法手のQ値を取得し、0-100にスケーリング
+        q_values = []
+        for action in legal_actions:
+            if action in root.children:
+                child = root.children[action]
+                # Q値は[-1, 1]の範囲（勝ち=1, 負け=-1）
+                q_value = child.get_value()
+                q_values.append((action, q_value))
+
+        if not q_values:
+            return evaluations
+
+        # Q値を0-100にスケーリング
+        # Q値: -1（最悪）→ 0, +1（最良）→ 100
+        for action, q_value in q_values:
+            # [-1, 1] → [0, 100]
+            scaled = int((q_value + 1.0) * 50.0)
+            # 範囲を0-100にクリップ
+            evaluations[action] = max(0, min(100, scaled))
+
+        return evaluations
