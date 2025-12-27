@@ -1,0 +1,50 @@
+# AlphaZero オセロAI - デフォルト設定 (8x8盤面)
+# RTX 4050 (6GB VRAM) 向けの最適化設定
+
+game:
+  size: 8  # 盤面サイズ (8x8)
+
+model:
+  num_blocks: 10    # ResNet残差ブロック数
+  num_filters: 128  # フィルタ数
+  board_size: 8     # 盤面サイズ
+
+training:
+  # 学習パラメータ
+  batch_size: 256           # バッチサイズ（RTX 4050では256-512が最適）
+  lr: 0.001                 # 学習率
+  lr_step_size: 100         # 学習率減衰ステップ
+  lr_gamma: 0.1             # 学習率減衰率
+  weight_decay: 0.0001      # 重み減衰
+  momentum: 0.9             # モーメンタム
+
+  # 学習ループ設定
+  num_iterations: 1000                # 学習イテレーション数
+  self_play_episodes_per_iter: 100    # イテレーションあたりのSelf-Playエピソード数
+  train_epochs_per_iter: 10           # イテレーションあたりの学習エポック数
+  checkpoint_interval: 10             # チェックポイント保存間隔（イテレーション）
+
+  # Replay Buffer
+  replay_buffer_size: 100000          # リプレイバッファの最大サイズ
+
+mcts:
+  num_simulations: 25       # MCTSシミュレーション回数（学習時）
+  num_simulations_eval: 50  # MCTSシミュレーション回数（評価時）
+  c_puct: 1.0               # PUCT探索定数
+  dirichlet_alpha: 0.3      # ディリクレ分布パラメータ
+  dirichlet_epsilon: 0.25   # ディリクレノイズ混合比率
+
+self_play:
+  temperature_threshold: 15  # 温度を下げる手数の閾値
+
+# ディレクトリ設定
+paths:
+  checkpoint_dir: "data/models"
+  log_dir: "data/logs"
+  data_dir: "data"
+
+# システム設定
+system:
+  device: "auto"              # "auto", "cuda", "cpu"
+  seed: 42                    # 乱数シード
+  use_mixed_precision: true   # 混合精度学習を使用

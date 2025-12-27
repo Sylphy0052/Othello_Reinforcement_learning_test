@@ -1,0 +1,50 @@
+# テスト用設定（パイプライン動作確認用）
+# 非常に小規模なモデルと少ないイテレーション
+
+game:
+  size: 8
+
+model:
+  num_blocks: 2     # 非常に小さいモデル
+  num_filters: 16   # 非常に小さいモデル
+  board_size: 8
+
+training:
+  # 学習パラメータ
+  batch_size: 16            # 小さいバッチ
+  lr: 0.01
+  lr_step_size: 10
+  lr_gamma: 0.1
+  weight_decay: 0.0001
+  momentum: 0.9
+
+  # 学習ループ設定（非常に短い）
+  num_iterations: 2                # 2イテレーションのみ
+  self_play_episodes_per_iter: 3   # 3エピソードのみ
+  train_epochs_per_iter: 2
+  checkpoint_interval: 1
+
+  # Replay Buffer
+  replay_buffer_size: 1000
+
+mcts:
+  num_simulations: 5        # 非常に少ない
+  num_simulations_eval: 10
+  c_puct: 1.0
+  dirichlet_alpha: 0.3
+  dirichlet_epsilon: 0.25
+
+self_play:
+  temperature_threshold: 10
+
+# ディレクトリ設定
+paths:
+  checkpoint_dir: "data/models/test"
+  log_dir: "data/logs/test"
+  data_dir: "data/test"
+
+# システム設定
+system:
+  device: "auto"
+  seed: 42
+  use_mixed_precision: true
