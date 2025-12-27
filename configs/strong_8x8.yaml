@@ -1,0 +1,47 @@
+# AlphaZero オセロAI - 強さ優先設定 (8x8盤面)
+# 時間をかけてでも強いモデルを学習する設定
+# RTX 4050 (6GB VRAM) で動作確認済み
+
+game:
+  size: 8
+
+model:
+  num_blocks: 10        # 大きいモデル（表現力重視）
+  num_filters: 128      # フィルタ数
+  board_size: 8
+
+training:
+  batch_size: 256                     # 安定した学習のため適度なサイズ
+  lr: 0.001                           # 低い学習率で安定学習
+  lr_step_size: 200                   # 学習率減衰を遅らせる
+  lr_gamma: 0.5                       # 緩やかな減衰
+  weight_decay: 0.0001
+  momentum: 0.9
+
+  num_iterations: 500                 # イテレーション数（質重視）
+  self_play_episodes_per_iter: 200    # 多くのエピソード（多様なデータ）
+  train_epochs_per_iter: 15           # より多くの学習エポック
+  checkpoint_interval: 25             # チェックポイント間隔
+
+  replay_buffer_size: 200000          # 大きいバッファ（より多くの履歴を保持）
+
+mcts:
+  num_simulations: 100                # 深い探索（強さの要）
+  num_simulations_eval: 200           # 評価時はさらに深く
+  c_puct: 1.5                         # 探索と活用のバランス調整
+  dirichlet_alpha: 0.3                # ディリクレ分布パラメータ
+  dirichlet_epsilon: 0.25             # ディリクレノイズ混合比率
+
+self_play:
+  temperature_threshold: 20           # 長めの探索フェーズ（多様な局面を学習）
+  num_parallel_games: 16              # 並列数（メモリとのバランス）
+
+paths:
+  checkpoint_dir: "data/models_strong"
+  log_dir: "data/logs_strong"
+  data_dir: "data"
+
+system:
+  device: "auto"
+  seed: 42
+  use_mixed_precision: true           # VRAM節約
