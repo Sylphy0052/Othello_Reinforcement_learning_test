@@ -193,7 +193,7 @@ class OthelloBoardUI(tk.Canvas):
             center_x, center_y,
             text=eval_str,
             fill="yellow",
-            font=("Arial", 8),
+            font=("helvetica", 8),
             tags="eval"
         )
 
@@ -216,7 +216,7 @@ class OthelloBoardUI(tk.Canvas):
 
         # 合法手かチェック
         if pos not in self.legal_moves:
-            messagebox.showwarning("無効な着手", "そこには置けません")
+            messagebox.showwarning("Invalid Move", "You cannot place here")
             return
 
         # コールバック実行
@@ -250,7 +250,7 @@ class InfoPanel(tk.Frame):
 
         # 現在の手番表示
         self.turn_label = tk.Label(
-            self, text="手番: 黒", font=("Arial", 14, "bold"), bg="#f0f0f0"
+            self, text="Turn: Black", font=("helvetica", 14, "bold"), bg="#f0f0f0"
         )
         self.turn_label.pack(pady=5)
 
@@ -259,26 +259,26 @@ class InfoPanel(tk.Frame):
         self.score_frame.pack(pady=5)
 
         tk.Label(
-            self.score_frame, text="黒: ", font=("Arial", 12), bg="#f0f0f0"
+            self.score_frame, text="Black: ", font=("helvetica", 12), bg="#f0f0f0"
         ).grid(row=0, column=0, sticky="e")
 
         self.black_score_label = tk.Label(
-            self.score_frame, text="2", font=("Arial", 12, "bold"), bg="#f0f0f0"
+            self.score_frame, text="2", font=("helvetica", 12, "bold"), bg="#f0f0f0"
         )
         self.black_score_label.grid(row=0, column=1, sticky="w")
 
         tk.Label(
-            self.score_frame, text="白: ", font=("Arial", 12), bg="#f0f0f0"
+            self.score_frame, text="White: ", font=("helvetica", 12), bg="#f0f0f0"
         ).grid(row=1, column=0, sticky="e")
 
         self.white_score_label = tk.Label(
-            self.score_frame, text="2", font=("Arial", 12, "bold"), bg="#f0f0f0"
+            self.score_frame, text="2", font=("helvetica", 12, "bold"), bg="#f0f0f0"
         )
         self.white_score_label.grid(row=1, column=1, sticky="w")
 
         # メッセージ表示
         self.message_label = tk.Label(
-            self, text="ゲーム開始", font=("Arial", 10), bg="#f0f0f0", fg="blue"
+            self, text="Game Start", font=("helvetica", 10), bg="#f0f0f0", fg="blue"
         )
         self.message_label.pack(pady=5)
 
@@ -289,7 +289,7 @@ class InfoPanel(tk.Frame):
         Args:
             player: 1=黒, -1=白
         """
-        turn_text = "手番: 黒" if player == 1 else "手番: 白"
+        turn_text = "Turn: Black" if player == 1 else "Turn: White"
         self.turn_label.config(text=turn_text)
 
     def update_scores(self, black_count: int, white_count: int):
