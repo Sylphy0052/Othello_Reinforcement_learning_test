@@ -1,0 +1,46 @@
+# AlphaZero オセロAI - 超高速学習設定 (8x8盤面)
+# 32並列 + 6ブロックモデルで最大限の高速化
+
+game:
+  size: 8
+
+model:
+  num_blocks: 6         # ★ 10 → 6 に削減
+  num_filters: 128      # フィルタ数は維持
+  board_size: 8
+
+training:
+  batch_size: 512       # ★ 256 → 512 に増加（GPU活用）
+  lr: 0.002             # ★ 0.001 → 0.002 に増加（小モデル用）
+  lr_step_size: 100
+  lr_gamma: 0.1
+  weight_decay: 0.0001
+  momentum: 0.9
+
+  num_iterations: 1000
+  self_play_episodes_per_iter: 50
+  train_epochs_per_iter: 10
+  checkpoint_interval: 10
+
+  replay_buffer_size: 100000
+
+mcts:
+  num_simulations: 15
+  num_simulations_eval: 50
+  c_puct: 1.0
+  dirichlet_alpha: 0.3
+  dirichlet_epsilon: 0.25
+
+self_play:
+  temperature_threshold: 15
+  num_parallel_games: 32    # ★ 8 → 32 に増加
+
+paths:
+  checkpoint_dir: "data/models"
+  log_dir: "data/logs"
+  data_dir: "data"
+
+system:
+  device: "auto"
+  seed: 42
+  use_mixed_precision: true
