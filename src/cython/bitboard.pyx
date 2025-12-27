@@ -211,6 +211,7 @@ cdef class OthelloBitboard:
             if legal == 0:
                 # パスが有効（合法手がない）
                 self._swap_players()
+                self.move_count += 1  # パスも1手としてカウント
                 self.passed = True
                 return True
             else:
