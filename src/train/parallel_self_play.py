@@ -12,9 +12,9 @@ GPUスループットを最大化する。
 
 import numpy as np
 import torch
-from typing import List, Tuple, Optional
+import time
+from typing import List, Tuple
 from dataclasses import dataclass, field
-from concurrent.futures import ThreadPoolExecutor
 import threading
 
 
@@ -257,6 +257,28 @@ class ParallelSelfPlayWorker:
             dirichlet_epsilon=dirichlet_epsilon,
         )
 
+    def _print_progress(
+        self, completed: int, total: int, samples: int, elapsed: float
+    ):
+        """プログレスバーを表示（上書き形式）"""
+        pct = completed / total * 100
+        bar_width = 25
+        filled = int(bar_width * completed / total)
+        bar = "█" * filled + "░" * (bar_width - filled)
+
+        # 残り時間の推定
+        if completed > 0:
+            rate = elapsed / completed
+            remaining = rate * (total - completed)
+            eta = f"{remaining:.0f}s"
+        else:
+            eta = "..."
+
+        # 上書き表示
+        msg = (f"\r  Self-Play: [{bar}] {completed:3d}/{total} "
+               f"({pct:5.1f}%) | {samples:,} samples | 残り {eta}   ")
+        print(msg, end="", flush=True)
+
     def execute_episodes(
         self,
         num_episodes: int,
@@ -272,8 +294,9 @@ class ParallelSelfPlayWorker:
         Returns:
             [(state, policy, value), ...]: すべてのエピソードの学習データ
         """
-        all_data = []
+        all_data: List[Tuple[np.ndarray, np.ndarray, float]] = []
         completed = 0
+        start_time = time.time()
 
         while completed < num_episodes:
             # 並列ゲーム数を決定
@@ -288,10 +311,13 @@ class ParallelSelfPlayWorker:
             all_data.extend(batch_data)
 
             completed += batch_size
+            elapsed = time.time() - start_time
 
-            # 進捗表示
-            if completed % 10 == 0 or completed == num_episodes:
-                print(f"Self-Play: {completed}/{num_episodes} episodes completed")
+            # プログレスバー表示（上書き形式、バッチごとに更新）
+            self._print_progress(completed, num_episodes, len(all_data), elapsed)
+
+        # 最後に改行
+        print()
 
         return all_data
 

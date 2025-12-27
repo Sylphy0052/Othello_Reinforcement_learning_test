@@ -14,8 +14,10 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
+from collections import deque
 import time
+import sys
 
 
 class AlphaZeroTrainer:
@@ -83,6 +85,54 @@ class AlphaZeroTrainer:
         self.global_step = 0
         self.epoch = 0
 
+        # 進捗追跡用
+        self.loss_history: deque = deque(maxlen=20)  # 直近20イテレーションのLoss
+        self.iter_times: deque = deque(maxlen=10)    # 直近10イテレーションの所要時間
+        self.training_start_time: float = 0
+
+    def _format_time(self, seconds: float) -> str:
+        """秒数を見やすい形式に変換"""
+        if seconds < 60:
+            return f"{seconds:.0f}s"
+        elif seconds < 3600:
+            m, s = divmod(int(seconds), 60)
+            return f"{m}m{s:02d}s"
+        else:
+            h, remainder = divmod(int(seconds), 3600)
+            m, s = divmod(remainder, 60)
+            return f"{h}h{m:02d}m"
+
+    def _get_eta(self, current_iter: int, total_iters: int) -> str:
+        """予想残り時間を計算"""
+        if len(self.iter_times) == 0:
+            return "計算中..."
+        avg_time = sum(self.iter_times) / len(self.iter_times)
+        remaining = total_iters - current_iter
+        eta_seconds = avg_time * remaining
+        return self._format_time(eta_seconds)
+
+    def _get_loss_trend(self) -> str:
+        """Lossの傾向を表示"""
+        if len(self.loss_history) < 2:
+            return ""
+        recent = list(self.loss_history)[-5:]  # 直近5個
+        if len(recent) < 2:
+            return ""
+        diff = recent[-1] - recent[0]
+        if diff < -0.05:
+            return "↓"
+        elif diff > 0.05:
+            return "↑"
+        else:
+            return "→"
+
+    def _print_progress_bar(self, current: int, total: int, width: int = 30) -> str:
+        """プログレスバーを生成"""
+        pct = current / total
+        filled = int(width * pct)
+        bar = "█" * filled + "░" * (width - filled)
+        return f"[{bar}] {pct*100:5.1f}%"
+
     def train(
         self,
         num_iterations: int,
@@ -110,13 +160,21 @@ class AlphaZeroTrainer:
         print(f"Iterations: {num_iterations}")
         print("=" * 70)
 
+        self.training_start_time = time.time()
+
         for iteration in range(1, num_iterations + 1):
             iter_start_time = time.time()
 
-            print(f"\n[Iteration {iteration}/{num_iterations}]")
+            # ヘッダー行: 進捗バーと予想残り時間
+            progress_bar = self._print_progress_bar(iteration, num_iterations)
+            eta = self._get_eta(iteration, num_iterations)
+            elapsed = self._format_time(time.time() - self.training_start_time)
+
+            print(f"\n{'─'*70}")
+            print(f"Iter {iteration}/{num_iterations} {progress_bar}  経過:{elapsed}  残り:{eta}")
+            print(f"{'─'*70}")
 
             # 1. Self-Play でデータ生成
-            print(f"  Self-Play: Generating {self_play_episodes_per_iter} episodes...")
             self_play_start = time.time()
 
             training_data = self.self_play_worker.execute_episodes(
@@ -127,12 +185,10 @@ class AlphaZeroTrainer:
             self.replay_buffer.add(training_data)
             self_play_time = time.time() - self_play_start
 
-            print(f"  Self-Play: Generated {len(training_data)} samples in {self_play_time:.2f}s")
-            print(f"  Replay Buffer: {len(self.replay_buffer)} total samples")
-
             # 2. 学習
+            avg_loss = 0.0
+            train_time = 0.0
             if self.replay_buffer.is_ready(batch_size):
-                print(f"  Training: {train_epochs_per_iter} epochs...")
                 train_start = time.time()
 
                 avg_loss = self._train_epochs(
@@ -141,7 +197,7 @@ class AlphaZeroTrainer:
                 )
 
                 train_time = time.time() - train_start
-                print(f"  Training: Avg Loss = {avg_loss:.4f} ({train_time:.2f}s)")
+                self.loss_history.append(avg_loss)
 
                 # TensorBoard ロギング
                 self.writer.add_scalar("Loss/train", avg_loss, iteration)
@@ -154,15 +210,30 @@ class AlphaZeroTrainer:
                 self.writer.add_scalar("Buffer/value_mean", buffer_stats["value_mean"], iteration)
                 self.writer.add_scalar("Buffer/value_std", buffer_stats["value_std"], iteration)
 
+            # イテレーション時間を記録
+            iter_time = time.time() - iter_start_time
+            self.iter_times.append(iter_time)
+
+            # サマリー行
+            trend = self._get_loss_trend()
+            print(f"  Loss: {avg_loss:.4f} {trend}  |  "
+                  f"Buffer: {len(self.replay_buffer):,}  |  "
+                  f"Self-Play: {self_play_time:.0f}s  |  "
+                  f"Train: {train_time:.1f}s")
+
             # 3. チェックポイント保存
             if iteration % checkpoint_interval == 0:
                 self.save_checkpoint(f"checkpoint_iter_{iteration}.pt")
 
-            iter_time = time.time() - iter_start_time
-            print(f"  Iteration Time: {iter_time:.2f}s")
+                # 定期的なLoss推移表示
+                if len(self.loss_history) >= 5:
+                    recent_losses = list(self.loss_history)[-5:]
+                    loss_str = " → ".join([f"{l:.3f}" for l in recent_losses])
+                    print(f"  📈 Loss推移 (直近5): {loss_str}")
 
+        total_time = self._format_time(time.time() - self.training_start_time)
         print("\n" + "=" * 70)
-        print("Training Completed")
+        print(f"Training Completed! Total Time: {total_time}")
         print("=" * 70)
 
         # 最終モデルを保存
