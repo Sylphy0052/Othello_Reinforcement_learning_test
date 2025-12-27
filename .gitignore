@@ -1,0 +1,37 @@
+# Build artifacts
+build/
+dist/
+*.egg-info/
+*.so
+*.pyd
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+
+# Data (large files)
+data/logs/*
+data/models/*.pt
+data/benchmark/*
+data/eval/*
+
+# Keep directory structure
+!data/**/.gitkeep
+
+# Local config
+.mcp.json
+
+# Lock files (optional - can be committed)
+# uv.lock
