@@ -20,6 +20,7 @@ AlphaZero方式による強化学習オセロAI。自己対戦のみで学習し
 - ✅ 学習ループ実装（Self-Play、Replay Buffer、AMP対応）
 - ✅ 評価システム実装（Arena、複数プレイヤー対応）
 - ✅ Tkinter GUI実装（対戦UI、待った機能、ヒント機能）
+- ✅ Web版実装（FastAPI、ブラウザ対戦）
 - ✅ CLI実装（train、eval コマンド）
 - ✅ **全64テストパス**
 
@@ -30,7 +31,8 @@ AlphaZero方式による強化学習オセロAI。自己対戦のみで学習し
 | 言語 | Python 3.13, Cython | 本体 / 高速化 |
 | 学習 | PyTorch (AMP) | GPU活用、ResNet学習 |
 | ゲームロジック | Cython Bitboard | uint64×2による高速盤面処理 |
-| GUI | Tkinter | 対戦インターフェース |
+| GUI | Tkinter | デスクトップ対戦インターフェース |
+| Web | FastAPI, uvicorn | ブラウザ対戦インターフェース |
 | テスト | pytest | 64テストケース |
 | パッケージ管理 | uv | 高速な依存関係管理 |
 
@@ -61,9 +63,13 @@ othello_alphazero/
 │   ├── eval/             # 評価システム
 │   │   ├── players.py    # 各種プレイヤー
 │   │   └── arena.py      # 対戦管理
-│   └── gui/              # GUIアプリケーション
-│       ├── board_ui.py   # ボードUI
-│       └── app.py        # メインアプリ
+│   ├── gui/              # GUIアプリケーション
+│   │   ├── board_ui.py   # ボードUI
+│   │   └── app.py        # メインアプリ
+│   └── web/              # Webアプリケーション
+│       ├── api.py        # FastAPI エンドポイント
+│       ├── game_manager.py # ゲーム状態管理
+│       └── static/       # HTML/CSS/JS
 ├── tests/                # 単体テスト (64テスト)
 │   ├── test_bitboard.py
 │   ├── test_model.py
@@ -72,6 +78,7 @@ othello_alphazero/
 │   └── test_eval.py
 ├── main.py               # CLIエントリポイント
 ├── run_gui.py            # GUIエントリポイント
+├── run_web.py            # Webサーバーエントリポイント
 ├── demo_gui.py           # GUIデモスクリプト
 ├── benchmark.py          # Bitboardベンチマーク
 ├── benchmark_ai.py       # AIベンチマーク
@@ -119,6 +126,7 @@ uv run python main.py train --config configs/test.yaml
 ```
 
 **学習設定**:
+
 - イテレーション: 1000回
 - Self-Play: 100エピソード/イテレーション
 - バッチサイズ: 256
@@ -140,6 +148,7 @@ uv run python main.py eval --checkpoint data/models/test/final_model.pt
 ```
 
 **出力例**:
+
 ```
 Random  : 75.0% win rate, avg score: 42.3
 Greedy  : 65.0% win rate, avg score: 38.1
@@ -175,12 +184,52 @@ uv run python test_gui_automated.py
 ```
 
 **GUI操作**:
+
 - クリックで石を配置
 - `Undo` ボタン: 1手戻る
 - `Hint` ボタン: AIの推奨手を表示
 - `New Game` ボタン: 新規ゲーム開始
 
-### 5. TensorBoard（学習監視）
+### 5. Web版（ブラウザ対戦）
+
+```bash
+# Webサーバー起動
+uv run python run_web.py
+
+# モデル指定して起動
+uv run python run_web.py --model data/models/checkpoint_iter_100.pt
+
+# ポート・ホスト変更
+uv run python run_web.py --host 0.0.0.0 --port 8080
+
+# 開発モード（ファイル変更時に自動リロード）
+uv run python run_web.py --reload
+```
+
+起動後、ブラウザで <http://localhost:8000> を開いて対戦できます。
+
+**Web版の特徴**:
+
+- ブラウザのみで動作（インストール不要でプレイ可能）
+- 人間 vs AI / 人間 vs 人間 対戦モード
+- リアルタイムでAIの思考状態を表示
+- ヒント機能（各手の評価値を可視化）
+- モデルの動的読み込み・シミュレーション回数変更
+
+**Web API エンドポイント**:
+
+| エンドポイント | 説明 |
+| ------------ | ---- |
+| `GET /` | メインページ |
+| `POST /api/game/new` | 新規ゲーム開始 |
+| `GET /api/game/state` | 現在の盤面状態取得 |
+| `POST /api/game/move` | 着手実行 |
+| `POST /api/game/undo` | 一手戻す |
+| `POST /api/game/ai-move` | AIに着手させる |
+| `GET /api/game/hint` | ヒント取得 |
+| `GET /api/ai/models` | 利用可能モデル一覧 |
+
+### 6. TensorBoard（学習監視）
 
 ```bash
 # 学習曲線の可視化
@@ -220,11 +269,13 @@ uv run mypy .
 ### コアコンポーネント
 
 #### 1. ビットボード (Cython)
+
 - `uint64`×2で盤面を表現（黒石・白石）
 - ビット演算による高速な合法手生成・石反転
 - **実績**: 10,000+ games/sec
 
 **主要メソッド**:
+
 ```python
 board.reset()                    # 初期化
 board.get_legal_moves()          # 合法手取得
@@ -234,6 +285,7 @@ board.copy()                     # 盤面コピー
 ```
 
 #### 2. ResNet (PyTorch)
+
 - **構成**: 10 ResBlocks × 128フィルタ
 - **パラメータ数**: 約300万
 - **入力**: `(3, 8, 8)` - 自軍石、敵軍石、合法手マスク
@@ -242,6 +294,7 @@ board.copy()                     # 盤面コピー
   - Value Head: スカラー値（勝率予測）
 
 #### 3. MCTS (モンテカルロ木探索)
+
 - **アルゴリズム**: PUCT（Polynomial Upper Confidence Trees）
 - **特徴**:
   - ロールアウトなし（NN評価値を使用）
@@ -250,6 +303,7 @@ board.copy()                     # 盤面コピー
 - **性能**: 50-100シミュレーション/手
 
 #### 4. 学習ループ
+
 ```
 Self-Play (100 games)
   ↓
@@ -263,6 +317,7 @@ Checkpoint保存
 ```
 
 #### 5. 評価システム
+
 - **プレイヤー**: Random, Greedy, MCTS, Human
 - **Arena**: 自動対戦管理、統計計算
 - **ベンチマーク**: JSON形式での結果保存
@@ -270,6 +325,7 @@ Checkpoint保存
 ### ハードウェア最適化
 
 **RTX 4050 (6GB VRAM) 対応**:
+
 - ✅ 混合精度学習 (AMP)
 - ✅ バッチサイズ 256（VRAM 使用量: ~4GB）
 - ✅ Gradient Accumulation対応
@@ -298,6 +354,7 @@ Checkpoint保存
 ## 📚 ドキュメント
 
 ### 設計ドキュメント
+
 詳細な設計情報は `docs/` ディレクトリを参照：
 
 - [要件定義書](docs/要件定義書.md) - システム要件・技術スタック
@@ -306,6 +363,7 @@ Checkpoint保存
 - [実装計画書](docs/実装計画書.md) - フェーズ別タスク・リスク管理
 
 ### その他のドキュメント
+
 - [REMAINING_TASKS.md](REMAINING_TASKS.md) - 残りタスク一覧
 - [CLAUDE.md](CLAUDE.md) - AI開発アシスタント向けガイド
 
