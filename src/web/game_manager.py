@@ -8,11 +8,68 @@ TkinterとWebの両方で共有可能にする
 from typing import Optional, Tuple, List, Dict
 import numpy as np
 import torch
+import logging
+from pathlib import Path
+from datetime import datetime
 
 from src.cython.bitboard import OthelloBitboard
 from src.model.net import OthelloResNet
 from src.mcts.mcts import MCTS
 from .schemas import GameState
+
+
+def setup_game_logger() -> logging.Logger:
+    """
+    ゲームログ用のロガーを設定
+
+    Returns:
+        logging.Logger: 設定済みのロガー
+    """
+    logger = logging.getLogger("othello_game")
+    logger.setLevel(logging.DEBUG)
+
+    # 既存のハンドラをクリア
+    if logger.handlers:
+        logger.handlers.clear()
+
+    # ログディレクトリを作成
+    log_dir = Path("data/logs")
+    log_dir.mkdir(parents=True, exist_ok=True)
+
+    # ファイルハンドラ（セッションごとにファイルを分ける）
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_file = log_dir / f"game_{timestamp}.log"
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    file_handler.setLevel(logging.DEBUG)
+
+    # フォーマット
+    formatter = logging.Formatter(
+        "%(asctime)s | %(levelname)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+    # コンソールハンドラ（INFO以上）
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+    logger.info(f"ログファイル作成: {log_file}")
+    return logger
+
+
+# モジュールレベルのロガー
+_logger: Optional[logging.Logger] = None
+
+
+def get_logger() -> logging.Logger:
+    """ロガーを取得（遅延初期化）"""
+    global _logger
+    if _logger is None:
+        _logger = setup_game_logger()
+    return _logger
 
 
 class GameManager:
@@ -24,6 +81,9 @@ class GameManager:
     """
 
     def __init__(self) -> None:
+        # ロガー
+        self.logger = get_logger()
+
         # ゲーム状態
         self.board = OthelloBitboard()
         self.board.reset()
@@ -33,12 +93,15 @@ class GameManager:
         self.current_player = 1  # 1=黒, -1=白
         self.game_mode = "human_vs_ai"
         self.last_message: Optional[str] = None
+        self.game_id = 0  # ゲーム番号
 
         # AI設定
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model: Optional[OthelloResNet] = None
         self.mcts: Optional[MCTS] = None
         self.ai_simulations = 50
+
+        self.logger.info("GameManager初期化完了")
 
     def new_game(self, mode: str = "human_vs_ai") -> None:
         """
@@ -47,6 +110,7 @@ class GameManager:
         Args:
             mode: ゲームモード (human_vs_ai, human_vs_human, ai_vs_ai)
         """
+        self.game_id += 1
         self.board.reset()
         self.game_history = []
         self.player_history = []
@@ -54,6 +118,67 @@ class GameManager:
         self.current_player = 1
         self.game_mode = mode
         self.last_message = "New game started"
+
+        self.logger.info(f"=" * 60)
+        self.logger.info(f"新規ゲーム開始 [Game #{self.game_id}] mode={mode}")
+        self._log_board_state("初期状態")
+
+    def _log_board_state(self, label: str = "") -> None:
+        """
+        盤面状態をログに出力
+
+        Args:
+            label: ログのラベル
+        """
+        board_array = self.get_board_array()
+        legal_moves = self.board.get_legal_moves()
+        filtered_legal_moves = [m for m in legal_moves if m < 64]
+
+        is_black_turn = self.board.move_count % 2 == 0
+        turn_str = "黒" if is_black_turn else "白"
+        self_count, opp_count = self.board.get_stone_counts()
+        if is_black_turn:
+            black_count, white_count = self_count, opp_count
+        else:
+            black_count, white_count = opp_count, self_count
+
+        self.logger.debug(f"--- {label} ---")
+        self.logger.debug(f"手数: {self.board.move_count}, 手番: {turn_str}")
+        self.logger.debug(f"黒: {black_count}, 白: {white_count}")
+
+        # 合法手を座標で表示
+        legal_coords = []
+        for pos in filtered_legal_moves:
+            row, col = pos // 8, pos % 8
+            legal_coords.append(f"{chr(65 + col)}{row + 1}({pos})")
+        self.logger.debug(f"合法手: {legal_coords}")
+
+        # 盤面を文字列で表示
+        board_str = "\n  A B C D E F G H\n"
+        for row in range(8):
+            board_str += f"{row + 1} "
+            for col in range(8):
+                val = board_array[row][col]
+                if val == 1:
+                    board_str += "● "
+                elif val == -1:
+                    board_str += "○ "
+                else:
+                    # 合法手の位置は * で表示
+                    pos = row * 8 + col
+                    if pos in filtered_legal_moves:
+                        board_str += "* "
+                    else:
+                        board_str += ". "
+            board_str += "\n"
+        self.logger.debug(f"盤面:{board_str}")
+
+    def _pos_to_coord(self, position: int) -> str:
+        """位置を座標文字列に変換"""
+        if position == 64:
+            return "PASS"
+        row, col = position // 8, position % 8
+        return f"{chr(65 + col)}{row + 1}"
 
     def make_move(self, position: int) -> Tuple[bool, Optional[str]]:
         """
@@ -65,15 +190,30 @@ class GameManager:
         Returns:
             (成功フラグ, エラーメッセージ)
         """
+        coord = self._pos_to_coord(position)
+        is_black_turn = self.board.move_count % 2 == 0
+        player_str = "黒" if is_black_turn else "白"
+
+        self.logger.info(f"[着手要求] {player_str} -> {coord}({position})")
+
         if self.is_ai_thinking:
+            self.logger.warning(f"[着手拒否] AI思考中")
             return False, "AI is thinking..."
 
         if self.board.is_terminal():
+            self.logger.warning(f"[着手拒否] ゲーム終了済み")
             return False, "Game has already ended"
 
         legal_moves = self.board.get_legal_moves()
         if position not in legal_moves:
+            legal_coords = [self._pos_to_coord(m) for m in legal_moves if m < 64]
+            self.logger.warning(
+                f"[着手拒否] 不正な手: {coord}({position}) - 合法手: {legal_coords}"
+            )
             return False, f"Invalid move: position {position} is not legal"
+
+        # 着手前の状態を記録
+        self._log_board_state(f"着手前 (手番: {player_str})")
 
         # 履歴保存
         self.game_history.append(self.board.copy())
@@ -91,6 +231,10 @@ class GameManager:
             coord = f"{chr(65 + col)}{row + 1}"
             self.last_message = f"Moved to {coord}"
 
+        # 着手後の状態を記録
+        self.logger.info(f"[着手完了] {player_str} -> {coord}({position})")
+        self._log_board_state("着手後")
+
         return True, None
 
     def undo(self) -> Tuple[bool, Optional[str]]:
@@ -100,12 +244,18 @@ class GameManager:
         Returns:
             (成功フラグ, エラーメッセージ)
         """
+        self.logger.info("[Undo要求]")
+
         if len(self.game_history) == 0:
+            self.logger.warning("[Undo拒否] 履歴なし")
             return False, "No moves to undo"
 
         self.board = self.game_history.pop()
         self.current_player = self.player_history.pop()
         self.last_message = "Move undone"
+
+        self.logger.info("[Undo完了]")
+        self._log_board_state("Undo後")
         return True, None
 
     def get_ai_move(self) -> Tuple[int, Optional[str]]:
@@ -150,9 +300,19 @@ class GameManager:
         Returns:
             (成功フラグ, エラーメッセージ)
         """
+        is_black_turn = self.board.move_count % 2 == 0
+        player_str = "黒" if is_black_turn else "白"
+
+        self.logger.info(f"[AI着手要求] {player_str}")
+        self._log_board_state(f"AI着手前 (手番: {player_str})")
+
         action, error = self.get_ai_move()
         if error:
+            self.logger.error(f"[AI着手失敗] {error}")
             return False, error
+
+        coord = self._pos_to_coord(action)
+        self.logger.info(f"[AI選択] {coord}({action})")
 
         # 履歴保存
         self.game_history.append(self.board.copy())
@@ -170,6 +330,9 @@ class GameManager:
             coord = f"{chr(65 + col)}{row + 1}"
             self.last_message = f"AI played at {coord}"
 
+        self.logger.info(f"[AI着手完了] {player_str} -> {coord}({action})")
+        self._log_board_state("AI着手後")
+
         return True, None
 
     def get_hint_evaluations(self) -> Tuple[Dict[int, int], Optional[str]]:
@@ -179,10 +342,14 @@ class GameManager:
         Returns:
             (評価値辞書 {position: value}, エラーメッセージ)
         """
+        self.logger.info("[ヒント要求]")
+
         if self.mcts is None:
+            self.logger.warning("[ヒント拒否] モデル未読み込み")
             return {}, "No model loaded"
 
         if self.board.is_terminal():
+            self.logger.warning("[ヒント拒否] ゲーム終了済み")
             return {}, "Game has ended"
 
         try:
@@ -198,9 +365,16 @@ class GameManager:
                 if pos < 64:
                     result[pos] = int(evaluations[pos])
 
+            # ヒント結果をログ
+            hint_str = ", ".join(
+                [f"{self._pos_to_coord(p)}={v}" for p, v in result.items()]
+            )
+            self.logger.info(f"[ヒント結果] {hint_str}")
+
             return result, None
 
         except Exception as e:
+            self.logger.error(f"[ヒント失敗] {e}")
             return {}, str(e)
 
     def load_model(self, model_path: str) -> Tuple[bool, Optional[str]]:
@@ -215,6 +389,8 @@ class GameManager:
         Returns:
             (成功フラグ, エラーメッセージ)
         """
+        self.logger.info(f"[モデル読み込み] {model_path}")
+
         try:
             checkpoint = torch.load(model_path, map_location=self.device)
 
@@ -252,10 +428,15 @@ class GameManager:
                 c_puct=1.0,
             )
 
+            self.logger.info(
+                f"[モデル読み込み完了] blocks={config.get('num_blocks', 10)}, "
+                f"filters={config.get('num_filters', 128)}, device={self.device}"
+            )
             self.last_message = f"Model loaded: {model_path}"
             return True, None
 
         except Exception as e:
+            self.logger.error(f"[モデル読み込み失敗] {e}")
             return False, str(e)
 
     def set_simulations(self, count: int) -> None:
